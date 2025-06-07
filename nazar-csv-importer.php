@@ -32,13 +32,13 @@ function nazar_csv_import_page_callback() {
                 <br><em style="color: red;">عدد بالاتر از 100 ممکن است باعث فشار به سرور شود.</em>
             </p>
             <p>
-                <label for="image_size_limit">حداکثر حجم تصاویر (مگابایت): </label>
-                <input type="number" name="image_size_limit" id="image_size_limit" value="2" min="0.01" max="50">
+                <label for="image_size_limit">حداکثر حجم تصاویر (کیلوبایت): </label>
+                <input type="number" name="image_size_limit" id="image_size_limit" value="100" min="1" max="20000">
                 <br><em style="color: #666;">تصاویر با حجم بیشتر از این مقدار در نظر گرفته نمی‌شوند.</em>
             </p>
             <p>
-                <label for="audio_size_limit">حداکثر حجم فایل‌های صوتی (مگابایت): </label>
-                <input type="number" name="audio_size_limit" id="audio_size_limit" value="5" min="0.01" max="50">
+                <label for="audio_size_limit">حداکثر حجم فایل‌های صوتی (کیلوبایت): </label>
+                <input type="number" name="audio_size_limit" id="audio_size_limit" value="2048" min="1" max="20000">
                 <br><em style="color: #666;">فایل‌های صوتی با حجم بیشتر از این مقدار در نظر گرفته نمی‌شوند.</em>
             </p>
             <input type="submit" name="nazar_upload_submit" class="button button-primary" value="آپلود فایل">
@@ -52,8 +52,8 @@ function nazar_csv_import_page_callback() {
         if (isset($uploaded['url']) && isset($uploaded['file'])) {
             $file_path = $uploaded['file'];
             $row_limit = intval($_POST['row_limit']) ?: 100;
-            $image_size_limit = intval($_POST['image_size_limit']) ?: 2;
-            $audio_size_limit = intval($_POST['audio_size_limit']) ?: 3;
+            $image_size_limit = intval($_POST['image_size_limit']) ?: 100;
+            $audio_size_limit = intval($_POST['audio_size_limit']) ?: 2048;
 
             $file_info = wp_check_filetype($uploaded['file']);
             if ( $file_info['type'] !== 'text/csv' && $file_info['type'] !== 'application/vnd.ms.excel' ) {

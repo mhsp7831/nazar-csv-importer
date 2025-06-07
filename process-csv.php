@@ -3,8 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 $file_path = sanitize_text_field($_POST['confirmed_csv_file_path']);
 $row_limit = intval($_POST['row_limit']) ?: 100;
-$image_size_limit = intval($_POST['image_size_limit']) ?: 2; // Default 2MB
-$audio_size_limit = intval($_POST['audio_size_limit']) ?: 5; // Default 5MB
+$image_size_limit = intval($_POST['image_size_limit']) ?: 100;
+$audio_size_limit = intval($_POST['audio_size_limit']) ?: 2048;
 
 if (!file_exists($file_path)) {
     echo "<p style='color:red;'>فایل یافت نشد.</p>";
@@ -40,7 +40,7 @@ function find_attachment_by_original_source_url($source_url) {
     return null;
 }
 
-function get_remote_file_size($url) {
+function get_remote_file_info($url) {
     // Validate URL format
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
         error_log("Invalid URL format in nazar-csv-importer: " . $url);
@@ -69,7 +69,8 @@ function get_remote_file_size($url) {
         return false;
     }
     
-    // Get file size from headers
+    // Get content type and file size from headers
+    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
     $file_size = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
     
     // Close cURL session
@@ -79,17 +80,43 @@ function get_remote_file_size($url) {
         error_log("Could not determine file size for URL in nazar-csv-importer: " . $url);
         return false;
     }
-    
-    return $file_size;
+
+    // Return both size and content type
+    return [
+        'size' => $file_size,
+        'type' => $content_type
+    ];
 }
 
-function is_file_size_ok($url, $limit_mb) {
-    $size = get_remote_file_size($url);
+function validate_image_format($content_type) {
+    $allowed_types = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp'
+    ];
+    return in_array($content_type, $allowed_types);
+}
+
+function validate_audio_format($content_type) {
+    $allowed_types = [
+        'audio/mpeg',
+        'audio/mp3',
+        'audio/mp4',
+        'audio/wav',
+        'audio/ogg',
+    ];
+    return in_array($content_type, $allowed_types);
+}
+
+function is_file_size_ok($url, $limit_kb) {
+    $size = get_remote_file_info($url);
     if ($size === false) {
         return false;
     }
-    $size_mb = $size / (1024 * 1024); // Convert to MB
-    return $size_mb <= $limit_mb;
+    $size_kb = $size['size'] / 1024; // Convert to KB
+    return $size_kb <= $limit_kb;
 }
 
 while (($data = fgetcsv($handle)) !== false && $row_index < $row_limit) {
@@ -111,12 +138,21 @@ while (($data = fgetcsv($handle)) !== false && $row_index < $row_limit) {
     }
 
     if (!empty($img_url)) {
-        if (!is_file_size_ok($img_url, $image_size_limit)) {
-            $error_message = 'حجم تصویر بیشتر از حد مجاز است';
-            if (!filter_var($img_url, FILTER_VALIDATE_URL)) {
-                $error_message = 'آدرس تصویر نامعتبر است';
-            }
-            $error_rows[] = array_merge([$row_index, $error_message], $data);
+        if (!filter_var($img_url, FILTER_VALIDATE_URL)) {
+            $error_rows[] = array_merge([$row_index, 'آدرس تصویر نامعتبر است'], $data);
+            continue;
+        }
+        $file_info = get_remote_file_info($img_url);
+        if ($file_info === false) {
+            $error_rows[] = array_merge([$row_index, 'بررسی تصویر ناموفق'], $data);
+            continue;
+        }
+        if (!validate_image_format($file_info['type'])) {
+            $error_rows[] = array_merge([$row_index, 'فرمت تصویر نامعتبر است'], $data);
+            continue;
+        }
+        if (($file_info['size'] / 1024) > $image_size_limit) {
+            $error_rows[] = array_merge([$row_index, 'حجم تصویر بیشتر از حد مجاز است'], $data);
             continue;
         }
         $existing_img_id = find_attachment_by_original_source_url($img_url);
@@ -135,12 +171,21 @@ while (($data = fgetcsv($handle)) !== false && $row_index < $row_limit) {
     }
 
     if (!empty($audio_url)) {
-        if (!is_file_size_ok($audio_url, $audio_size_limit)) {
-            $error_message = 'حجم فایل صوتی بیشتر از حد مجاز است';
-            if (!filter_var($audio_url, FILTER_VALIDATE_URL)) {
-                $error_message = 'آدرس فایل صوتی نامعتبر است';
-            }
-            $error_rows[] = array_merge([$row_index, $error_message], $data);
+        if (!filter_var($audio_url, FILTER_VALIDATE_URL)) {
+            $error_rows[] = array_merge([$row_index, 'آدرس فایل صوتی نامعتبر است'], $data);
+            continue;
+        }
+        $file_info = get_remote_file_info($audio_url);
+        if ($file_info === false) {
+            $error_rows[] = array_merge([$row_index, 'بررسی فایل صوتی ناموفق'], $data);
+            continue;
+        }
+        if (!validate_audio_format($file_info['type'])) {
+            $error_rows[] = array_merge([$row_index, 'فرمت فایل صوتی نامعتبر است'], $data);
+            continue;
+        }
+        if (($file_info['size'] / 1024) > $audio_size_limit) {
+            $error_rows[] = array_merge([$row_index, 'حجم فایل صوتی بیشتر از حد مجاز است'], $data);
             continue;
         }
         $existing_audio_id = find_attachment_by_original_source_url($audio_url);
